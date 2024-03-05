@@ -27,6 +27,7 @@
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
+static struct list sleep_list;
 
 /* Idle thread. */
 static struct thread *idle_thread;
@@ -108,6 +109,7 @@ thread_init (void) {
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
+	list_init (&sleep_list);
 	list_init (&destruction_req);
 
 	/* Set up a thread structure for the running thread. */
@@ -237,7 +239,6 @@ thread_unblock (struct thread *t) {
 	enum intr_level old_level;
 
 	ASSERT (is_thread (t));
-
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
 	list_push_back (&ready_list, &t->elem);
@@ -296,17 +297,82 @@ thread_exit (void) {
    may be scheduled again immediately at the scheduler's whim. */
 void
 thread_yield (void) {
-	struct thread *curr = thread_current ();
+	struct thread *curr = thread_current(); 
 	enum intr_level old_level;
 
-	ASSERT (!intr_context ());
+	ASSERT (!intr_context ()); //True when external is on, otherwise False
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
 		list_push_back (&ready_list, &curr->elem);
-	do_schedule (THREAD_READY);
+	do_schedule (THREAD_READY); //running -> rdy
 	intr_set_level (old_level);
 }
+
+void thread_sleep(int64_t deadline)
+{
+	enum intr_level old_level;
+	struct thread *curr = thread_current();
+	curr->wakeup_ticks = deadline;
+	ASSERT (!intr_context ());
+	old_level = intr_disable();
+	if (curr != idle_thread)
+	{
+		list_insert_ordered(&sleep_list, &curr->elem, compare_ticks, NULL);
+	}
+	// thread_block();
+	do_schedule (THREAD_BLOCKED);
+	intr_set_level (old_level);
+}
+
+void thread_wakeup(int64_t curr_tick)
+{
+	enum intr_level old_level;
+	old_level = intr_disable();
+	struct list_elem *curr_elem = list_begin(&sleep_list);
+	//struct thread* curr = list_entry(curr_elem, struct thread, elem);
+	
+
+	while (curr_elem != list_end(&sleep_list))
+    {
+        struct thread *curr = list_entry(curr_elem, struct thread, elem);
+
+        if (curr_tick >= curr->wakeup_ticks)
+        {
+            curr_elem = list_remove(curr_elem);
+            thread_unblock(curr);
+        }
+        else
+        {
+            break;
+        }
+    }
+	// if(curr_tick <= curr->wakeup_ticks)
+	// {
+	// 	thread_unblock(curr);	
+	// 	//do_schedule(THREAD_READY);
+	// 	list_push_back(&ready_list, &curr->elem);
+	// 	list_remove(curr_elem);
+	// }
+	// else
+	// {
+	// 	return;
+	// }
+	
+	intr_set_level(old_level);
+}
+
+//compare threads' deadline
+bool compare_ticks(const struct list_elem *first, const struct list_elem *second, void *aux UNUSED)
+{
+	struct thread *first_thread = list_entry(first, struct thread, elem);
+	struct thread *second_thread = list_entry(second, struct thread, elem);
+	return first_thread->wakeup_ticks < second_thread->wakeup_ticks; 
+}
+
+
+
+
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
@@ -588,3 +654,6 @@ allocate_tid (void) {
 
 	return tid;
 }
+
+
+

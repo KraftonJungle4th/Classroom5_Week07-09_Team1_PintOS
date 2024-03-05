@@ -1,0 +1,13 @@
+FAIL
+Kernel panic in run: PANIC at ../../lib/kernel/list.c:425 in list_insert_ordered(): assertion `less != NULL' failed.
+Call stack: 0x8004213373 0x80042146c1 0x80042078fa 0x800420d046 0x800421a8b8 0x80042167af 0x8004206636 0x8004206783 0x8004206120
+Translation of call stack:
+0x0000008004213373: debug_panic (lib/kernel/debug.c:32)
+0x00000080042146c1: list_insert_ordered (lib/kernel/list.c:427)
+0x00000080042078fa: thread_sleep (threads/thread.c:602)
+0x000000800420d046: timer_sleep (devices/timer.c:107)
+0x000000800421a8b8: test_mlfqs_block (tests/threads/mlfqs/mlfqs-block.c:38)
+0x00000080042167af: run_test (tests/threads/tests.c:57)
+0x0000008004206636: run_task (threads/init.c:252)
+0x0000008004206783: run_actions (threads/init.c:297)
+0x0000008004206120: main (threads/init.c:125)

@@ -10,6 +10,7 @@
 #endif
 
 
+
 /* States in a thread's life cycle. */
 enum thread_status {
 	THREAD_RUNNING,     /* Running thread. */
@@ -91,7 +92,7 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
-
+	int64_t wakeup_ticks; // thread deadline
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
 
@@ -143,4 +144,7 @@ int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
 
+void thread_wakeup(int64_t g_ticks);
+bool compare_ticks(const struct list_elem *first, const struct list_elem *second, void *aux UNUSED);
+void thread_sleep(int64_t ticks);
 #endif /* threads/thread.h */
