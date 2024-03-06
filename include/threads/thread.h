@@ -143,7 +143,7 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
-
+bool compare_priority(const struct list_elem *first, const struct list_elem *second, void *aux UNUSED);
 void thread_wakeup(int64_t g_ticks);
 bool compare_ticks(const struct list_elem *first, const struct list_elem *second, void *aux UNUSED);
 void thread_sleep(int64_t ticks);
