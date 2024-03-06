@@ -29,6 +29,9 @@
 static struct list ready_list;
 static struct semaphore sema;
 
+/*Define Sleep Queue*/
+static struct list sleep_list;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -50,7 +53,9 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
+
 static long long global_ticks;
+
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
@@ -112,6 +117,9 @@ thread_init (void) {
 	lock_init (&tid_lock);
 	list_init (&ready_list);
 	list_init (&destruction_req);
+
+	/*Init sleep_list*/
+	list_init (&sleep_list);
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
@@ -210,11 +218,12 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
+  
 	//printf("t->name :(%s), current->name :(%s)\n",t->name,thread_current()->name);
 	//printf("t->priority :(%d), current->priority :(%d) \n",t->priority,thread_get_priority());
 	if (t->priority > thread_get_priority())
 		thread_yield();
-	return tid;
+
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
@@ -246,8 +255,10 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
+
 	list_insert_ordered(&ready_list,&t->elem,greater_priority,NULL);
 	// list_push_front (&ready_list, &t->elem);
+
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -311,6 +322,7 @@ thread_yield (void) {
 	old_level = intr_disable ();
 	if (curr != idle_thread)
 		list_insert_ordered(&ready_list,&curr->elem,greater_priority,NULL);
+
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -354,6 +366,7 @@ void thread_awake(int64_t ticks){
 /* Sets the current thread's priority to 0N0E0W0_0P000RIORITY. */
 void
 thread_set_priority (int new_priority) {
+
 	struct thread *t = thread_current();
 	struct thread *ready_first = list_entry(list_begin(&ready_list),struct thread, elem); 
 	
@@ -644,4 +657,5 @@ allocate_tid (void) {
 	lock_release (&tid_lock);
 
 	return tid;
+
 }
