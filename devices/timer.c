@@ -93,9 +93,11 @@ timer_elapsed (int64_t then) {
 // ticks 시간동안 프로그램을 멈추겠다
 void
 timer_sleep (int64_t ticks) {
-	ASSERT (intr_get_level () == INTR_ON);
-	thread_sleep(start + ticks);
+	int64_t start = timer_ticks ();
 
+	ASSERT (intr_get_level () == INTR_ON);
+
+	thread_sleep(start + ticks);
 }
 
 /* Suspends execution for approximately MS milliseconds. */
