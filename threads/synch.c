@@ -75,6 +75,9 @@ sema_down (struct semaphore *sema) {
 	intr_set_level (old_level);
 }
 
+
+
+
 /* Down or "P" operation on a semaphore, but only if the
    semaphore is not already 0.  Returns true if the semaphore is
    decremented, false otherwise.
@@ -299,13 +302,22 @@ cond_wait (struct condition *cond, struct lock *lock) {
    interrupt handler. */
 void
 cond_signal (struct condition *cond, struct lock *lock UNUSED) {
+
+
 	ASSERT (cond != NULL);
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
 	ASSERT (lock_held_by_current_thread (lock));
 
+	
+	
+
 	if (!list_empty (&cond->waiters))
+	{
+		list_sort(&cond->waiters,compare_priority_sema,NULL);
 		sema_up (&list_entry (list_pop_front (&cond->waiters),struct semaphore_elem, elem)->semaphore);
+
+	}
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
@@ -321,4 +333,18 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 
 	while (!list_empty (&cond->waiters))
 		cond_signal (cond, lock);
+}
+
+//cinoare semaphores' priority and return higher priority
+bool compare_priority_sema(const struct list_elem *first, const struct list_elem *second, void *aux UNUSED) 
+{
+	struct semaphore_elem *curr = list_entry(first, struct semaphore_elem, elem);
+	struct semaphore_elem *cmp = list_entry(second, struct semaphore_elem, elem);
+
+	// struct list *a = &curr->semaphore.waiters;
+	// struct list *b = &cmp->semaphore.waiters;
+
+	struct thread *first_thread = list_entry(list_begin(&curr->semaphore.waiters), struct thread, elem);
+	struct thread *second_thread = list_entry(list_begin(&cmp->semaphore.waiters), struct thread, elem);
+	return first_thread->priority > second_thread->priority;
 }

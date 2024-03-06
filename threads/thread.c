@@ -383,6 +383,7 @@ bool compare_priority(const struct list_elem *first, const struct list_elem *sec
 
 
 
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
