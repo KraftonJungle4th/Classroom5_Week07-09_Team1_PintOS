@@ -93,9 +93,11 @@ struct thread {
 	int priority;                       /* Priority. */
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
-	
+	struct list_elem all_elem;
 	int64_t awake_ticks;
 	struct list lock_list;
+	int nice;
+	int32_t recent_cpu;
 
 	/*time to wake up*/
 	int64_t wakeup_ticks; 
@@ -127,7 +129,7 @@ void thread_print_stats (void);
 
 typedef void thread_func (void *aux);
 tid_t thread_create (const char *name, int priority, thread_func *, void *);
-
+int thread_ready_list(void);
 void thread_block (void);
 void thread_unblock (struct thread *);
 
@@ -148,7 +150,9 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
-
+void update_load_avg(void);
 void do_iret (struct intr_frame *tf);
-
+void update_recent_cpu(void);
+void decay_recent_cpu(void);
+void set_decay(struct thread *t);
 #endif /* threads/thread.h */

@@ -81,6 +81,11 @@ bool less_awake(const struct list_elem *a, const struct list_elem *b, void *aux)
     else
       return thread_a->awake_ticks < thread_b->awake_ticks;
 }
+bool less_awake_mlfqs(const struct list_elem *a, const struct list_elem *b, void *aux) {
+    struct thread *thread_a = list_entry(a, struct thread, elem);
+    struct thread *thread_b = list_entry(b, struct thread, elem);
+   return thread_a->awake_ticks < thread_b->awake_ticks;
+}
 bool greater_priority(const struct list_elem *a, const struct list_elem *b, void *aux) {
     struct thread *thread_a = list_entry(a, struct thread, elem);
     struct thread *thread_b = list_entry(b, struct thread, elem);
@@ -113,10 +118,31 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
+		list_insert_ordered(&sema->waiters,&thread_current()->elem,greater_priority,NULL);
+		//list_push_back (&sema->waiters, &thread_current ()->elem);
+		//printf(" 1sema value: %d ,block name : (%s) \n",sema->value,thread_current()->name);
+      thread_block ();
+	}
+   //printf(" 2sema value: %d ,block name : (%s) \n",sema->value,thread_current()->name);
+	sema->value--;
+	intr_set_level (old_level);
+}
+
+void
+sema_down_sleep (struct semaphore *sema) {
+	enum intr_level old_level;
+
+	ASSERT (sema != NULL);
+	ASSERT (!intr_context ());
+
+	old_level = intr_disable ();
+	while (sema->value == 0) {
 		list_insert_ordered(&sema->waiters,&thread_current()->elem,less_awake,NULL);
 		//list_push_back (&sema->waiters, &thread_current ()->elem);
-		thread_block ();
+		//printf(" 1sema value: %d ,block name : (%s) \n",sema->value,thread_current()->name);
+      thread_block ();
 	}
+   //printf(" 2sema value: %d ,block name : (%s) \n",sema->value,thread_current()->name);
 	sema->value--;
 	intr_set_level (old_level);
 }
@@ -152,6 +178,29 @@ sema_try_down (struct semaphore *sema) {
    This function may be called from an interrupt handler. */
 void
 sema_up (struct semaphore *sema) {
+	enum intr_level old_level;
+	ASSERT (sema != NULL);
+	old_level = intr_disable ();
+   sema->value++;
+	if (!list_empty (&sema->waiters))
+   {
+      list_sort(&sema->waiters,greater_priority,NULL);
+      struct thread *t = list_entry(list_begin(&sema->waiters),struct thread, elem);
+      // t = list_entry(list_max(&sema->waiters,greater_priority,NULL),struct thread,elem);
+		thread_unblock (list_entry (list_pop_front (&sema->waiters),
+					struct thread, elem)); 
+      //printf("waiter thread (%s) pri: %d, upper thread (%s) pri: %d\n",
+      //t->name, t->priority, thread_current()->name, thread_current()->priority);
+      //printf("sema_up t_name:(%s)\n",t->name);
+      if(get_priority(t) > thread_get_priority() && !intr_context()){
+         thread_yield();
+      }
+   }
+
+	intr_set_level (old_level);
+}
+void
+sema_up_awake (struct semaphore *sema) {
 	enum intr_level old_level;
 	ASSERT (sema != NULL);
 	old_level = intr_disable ();
@@ -247,11 +296,14 @@ lock_acquire (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
-   if(lock->holder != NULL && find_elem_by_lock(&lock->holder->lock_list,lock) == NULL)
-   {
-      elem.lock = lock;
-      list_insert_ordered(&lock->holder->lock_list,&elem.elem,greater_priority_lock,NULL);
+   if(!thread_mlfqs){
+      if(lock->holder != NULL && find_elem_by_lock(&lock->holder->lock_list,lock) == NULL)
+      {
+         elem.lock = lock;
+         list_insert_ordered(&lock->holder->lock_list,&elem.elem,greater_priority_lock,NULL);
+      }
    }
+   
    sema_down (&lock->semaphore);
 	lock->holder = thread_current ();
 }
@@ -286,13 +338,14 @@ lock_release (struct lock *lock) {
    struct list_elem *e;
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
-
-   if((e = find_elem_by_lock(&thread_current()->lock_list,lock)) != NULL)
-   {
-      //printf("check : thread name :(%s)\n",list_entry(e,struct lock_elem,elem)->lock->holder->name);
-      list_remove(e);
-      list_sort(&thread_current()->lock_list,greater_priority_lock,NULL);
-   }   
+   if(!thread_mlfqs){
+      if((e = find_elem_by_lock(&thread_current()->lock_list,lock)) != NULL)
+      {
+         //printf("check : thread name :(%s)\n",list_entry(e,struct lock_elem,elem)->lock->holder->name);
+         list_remove(e);
+         list_sort(&thread_current()->lock_list,greater_priority_lock,NULL);
+      }  
+   }
    lock->holder = NULL;
 	sema_up (&lock->semaphore);
 }
