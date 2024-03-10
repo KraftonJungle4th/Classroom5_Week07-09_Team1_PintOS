@@ -213,6 +213,8 @@ parse_options (char **argv) {
 			usage ();
 		else if (!strcmp (name, "-q"))
 			power_off_when_done = true;
+		else if (!strcmp (name, "-mlfqs"))
+      		thread_mlfqs = true;
 #ifdef FILESYS
 		else if (!strcmp (name, "-f"))
 			format_filesys = true;
