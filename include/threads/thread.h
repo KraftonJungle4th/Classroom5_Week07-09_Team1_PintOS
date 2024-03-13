@@ -99,6 +99,9 @@ struct thread {
 	int nice;
 	int32_t recent_cpu;
 
+	/*time to wake up*/
+	int64_t wakeup_ticks; 
+	
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */

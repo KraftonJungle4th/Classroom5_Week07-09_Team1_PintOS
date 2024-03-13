@@ -94,9 +94,7 @@ timer_elapsed (int64_t then) {
 void
 timer_sleep (int64_t ticks) {
 	int64_t start = timer_ticks ();
-
 	ASSERT (intr_get_level () == INTR_ON);
-
 	thread_sleep(start + ticks);
 }
 
@@ -130,6 +128,7 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
+
 	/*
 		1. sleeplist 와 전역 tick 확인.
 		2. 깨울 thread 있는지 확인.
@@ -137,6 +136,7 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 		4. 전역 tick 업데이트 
 	*/
 	thread_awake(ticks);
+<<<<<<< HEAD
 	if(thread_mlfqs){
 		update_recent_cpu();
 		if(ticks % TIMER_FREQ == 0 ){
@@ -147,6 +147,9 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 			update_priority();
 		}
 	}
+=======
+
+>>>>>>> c000dea668ba568a46ac6a65e84b324691218117
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
