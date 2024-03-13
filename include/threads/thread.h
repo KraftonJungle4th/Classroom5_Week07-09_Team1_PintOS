@@ -99,9 +99,6 @@ struct thread {
 	int nice;
 	int32_t recent_cpu;
 
-	/*time to wake up*/
-	int64_t wakeup_ticks; 
-	
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
@@ -155,4 +152,6 @@ void do_iret (struct intr_frame *tf);
 void update_recent_cpu(void);
 void decay_recent_cpu(void);
 void set_decay(struct thread *t);
+void set_priority(struct thread *t);
+void update_priority(void);
 #endif /* threads/thread.h */

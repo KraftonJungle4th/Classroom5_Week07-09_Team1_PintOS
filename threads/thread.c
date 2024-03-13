@@ -63,9 +63,7 @@
 static struct list ready_list;
 static struct list all_list;
 static struct semaphore sema;
-
 static int32_t load_avg;
-
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -87,9 +85,7 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
-
 static long long global_ticks;
-
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
@@ -152,9 +148,6 @@ thread_init (void) {
 	list_init (&ready_list);
 	list_init (&all_list);
 	list_init (&destruction_req);
-
-	/*Init sleep_list*/
-	list_init (&sleep_list);
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
@@ -252,7 +245,6 @@ thread_create (const char *name, int priority,
 	t->tf.ss = SEL_KDSEG;
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
-	enum intr_level old_level;
 	
 	if(thread_current())
 		t->recent_cpu = thread_current()->recent_cpu;
@@ -263,10 +255,10 @@ thread_create (const char *name, int priority,
 	
 	/* Add to run queue. */
 	thread_unblock (t);
-
+	
 	if (t->priority > thread_get_priority())
 		thread_yield();
-
+	return tid;
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
@@ -298,10 +290,8 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-
 	list_insert_ordered(&ready_list,&t->elem,greater_priority,NULL);
 	// list_push_front (&ready_list, &t->elem);
-
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -366,7 +356,6 @@ thread_yield (void) {
 	old_level = intr_disable ();
 	if (curr != idle_thread)
 		list_insert_ordered(&ready_list,&curr->elem,greater_priority,NULL);
-
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -384,11 +373,14 @@ void thread_sleep(int64_t end_ticks) {
 	curr->awake_ticks = end_ticks;
     old_level = intr_disable();
     if (curr != idle_thread) {
-		//printf(" down thread name : %s , end_ticks : %zu, priority : %zu \n",curr->name,curr->awake_ticks,curr->priority);
-		while(global_ticks < end_ticks){
+		if(thread_mlfqs){
+			while(global_ticks < end_ticks)
+				sema_down_sleep(&sema);
+		}else{
 			sema_down_sleep(&sema);
+			thread_yield();
 		}
-    }
+	}
     intr_set_level(old_level);
 }
 
@@ -396,21 +388,25 @@ void thread_sleep(int64_t end_ticks) {
 void thread_awake(int64_t ticks){
 	global_ticks = ticks;
 	struct list_elem *e = list_begin(&sema.waiters);
+	enum intr_level old_level;
+	// old_level = intr_disable();
 	while(e != list_end(&sema.waiters))
 	{
 		if(list_entry(e,struct thread,elem)->awake_ticks <= ticks)
-		{
+		{	
 			sema_up_awake(&sema);
 			e = list_begin(&sema.waiters);
 			continue;
+		}else{
+			break;
 		}
-		e = list_next(e);
 	}
+	
+	// intr_set_level(old_level);
 }
 /* Sets the current thread's priority to 0N0E0W0_0P000RIORITY. */
 void
 thread_set_priority (int new_priority) {
-
 	struct thread *t = thread_current();
 	struct thread *ready_first = list_entry(list_begin(&ready_list),struct thread, elem); 
 	
@@ -445,7 +441,10 @@ int thread_ready_list() {
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int nice UNUSED) {
-	thread_current()->nice = nice;
+	struct thread *t = thread_current();
+	t->nice = nice;
+	set_priority(t);
+	thread_yield();
 }
 
 /* Returns the current thread's nice value. */
@@ -712,7 +711,6 @@ allocate_tid (void) {
 	lock_release (&tid_lock);
 
 	return tid;
-
 }
 void update_load_avg(void) {
 	load_avg = ADD(MULTIPLY(DIVIDE(TO_FIXED_POINT(59,f),TO_FIXED_POINT(60,f),f),load_avg,f),MULTIPLY_BY_INT(DIVIDE(TO_FIXED_POINT(1,f),TO_FIXED_POINT(60,f),f),thread_ready_list()));
@@ -753,7 +751,7 @@ void decay_recent_cpu(void) {
 	
 }
 void set_priority(struct thread *t){
-	t->priority = PRI_MAX-(t->recent_cpu/4) - (t->nice *2);
+	t->priority = PRI_MAX- TO_INTEGER_NEAREST(DIVIDE_BY_INT(t->recent_cpu,4),f) - (t->nice *2);
 }
 void update_recent_cpu(void) {
 	struct thread *t = thread_current();
@@ -771,5 +769,4 @@ void update_priority(void) {
 		e = list_next(e);
 	}
 	// printf("DECAY end\n");
-
 }

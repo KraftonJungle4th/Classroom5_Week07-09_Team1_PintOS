@@ -130,7 +130,6 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
-
 	/*
 		1. sleeplist 와 전역 tick 확인.
 		2. 깨울 thread 있는지 확인.
@@ -138,7 +137,6 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 		4. 전역 tick 업데이트 
 	*/
 	thread_awake(ticks);
-
 	if(thread_mlfqs){
 		update_recent_cpu();
 		if(ticks % TIMER_FREQ == 0 ){
@@ -149,7 +147,6 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 			update_priority();
 		}
 	}
-
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

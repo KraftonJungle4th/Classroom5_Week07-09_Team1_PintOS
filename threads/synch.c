@@ -119,12 +119,9 @@ sema_down (struct semaphore *sema) {
 	old_level = intr_disable ();
 	while (sema->value == 0) {
 		list_insert_ordered(&sema->waiters,&thread_current()->elem,greater_priority,NULL);
-		//list_push_back (&sema->waiters, &thread_current ()->elem);
-		//printf(" 1sema value: %d ,block name : (%s) \n",sema->value,thread_current()->name);
-      thread_block ();
+		thread_block ();
 	}
-   //printf(" 2sema value: %d ,block name : (%s) \n",sema->value,thread_current()->name);
-	sema->value--;
+   sema->value--;
 	intr_set_level (old_level);
 }
 
@@ -137,13 +134,10 @@ sema_down_sleep (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_insert_ordered(&sema->waiters,&thread_current()->elem,less_awake,NULL);
-		//list_push_back (&sema->waiters, &thread_current ()->elem);
-		//printf(" 1sema value: %d ,block name : (%s) \n",sema->value,thread_current()->name);
-      thread_block ();
+		list_insert_ordered(&sema->waiters,&thread_current()->elem,less_awake_mlfqs,NULL);
+		thread_block ();
 	}
-   //printf(" 2sema value: %d ,block name : (%s) \n",sema->value,thread_current()->name);
-	sema->value--;
+   sema->value--;
 	intr_set_level (old_level);
 }
 
@@ -186,12 +180,8 @@ sema_up (struct semaphore *sema) {
    {
       list_sort(&sema->waiters,greater_priority,NULL);
       struct thread *t = list_entry(list_begin(&sema->waiters),struct thread, elem);
-      // t = list_entry(list_max(&sema->waiters,greater_priority,NULL),struct thread,elem);
-		thread_unblock (list_entry (list_pop_front (&sema->waiters),
+      thread_unblock (list_entry (list_pop_front (&sema->waiters),
 					struct thread, elem)); 
-      //printf("waiter thread (%s) pri: %d, upper thread (%s) pri: %d\n",
-      //t->name, t->priority, thread_current()->name, thread_current()->priority);
-      //printf("sema_up t_name:(%s)\n",t->name);
       if(get_priority(t) > thread_get_priority() && !intr_context()){
          thread_yield();
       }
@@ -207,14 +197,9 @@ sema_up_awake (struct semaphore *sema) {
    sema->value++;
 	if (!list_empty (&sema->waiters))
    {
-      list_sort(&sema->waiters,less_awake,NULL);
-      struct thread *t = list_entry(list_begin(&sema->waiters),struct thread, elem);
-      // t = list_entry(list_max(&sema->waiters,greater_priority,NULL),struct thread,elem);
-		thread_unblock (list_entry (list_pop_front (&sema->waiters),
-					struct thread, elem)); 
-      //printf("waiter thread (%s) pri: %d, upper thread (%s) pri: %d\n",
-      //t->name, t->priority, thread_current()->name, thread_current()->priority);
-      //printf("sema_up t_name:(%s)\n",t->name);
+      struct thread *t = list_entry(list_pop_front (&sema->waiters),struct thread, elem);
+      thread_unblock (t); 
+
       if(get_priority(t) > thread_get_priority() && !intr_context()){
          thread_yield();
       }
@@ -341,7 +326,6 @@ lock_release (struct lock *lock) {
    if(!thread_mlfqs){
       if((e = find_elem_by_lock(&thread_current()->lock_list,lock)) != NULL)
       {
-         //printf("check : thread name :(%s)\n",list_entry(e,struct lock_elem,elem)->lock->holder->name);
          list_remove(e);
          list_sort(&thread_current()->lock_list,greater_priority_lock,NULL);
       }  
@@ -403,7 +387,6 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	sema_init (&waiter.semaphore, 0);
    list_insert_ordered(&cond->waiters,&waiter.elem,
 		greater_priority_cond,NULL); 
-	//list_push_back (&cond->waiters, &waiter.elem);
 	lock_release (lock);
 	sema_down (&waiter.semaphore);
 	lock_acquire (lock);
