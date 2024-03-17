@@ -85,13 +85,12 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		if(!check_addr(f->R.rdi))
 			exit(-1);
 		f->R.rax = open(f->R.rdi);
-
 		break;
 	case SYS_FILESIZE:
 		f->R.rax = filesize(f->R.rdi);
 		break;
 	case SYS_READ:
-		if(!check_addr(f->R.rdi))
+		if(!check_addr(f->R.rsi))
 			exit(-1);
 		f->R.rax = read(f->R.rdi,f->R.rsi,f->R.rdx);
 		break;
@@ -181,13 +180,14 @@ bool remove (const char *file){
 }
 
 int open (const char *file){
-	if(file == NULL ){
+	if(file == NULL){
 		exit(-1);
 	}
 	if(strcmp(file,"")== 0 ){
 		return -1;
 	}
 	struct file *open_file = filesys_open(file);
+
 	if(open_file == NULL){
 		return -1;
 	}else {
