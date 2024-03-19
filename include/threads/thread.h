@@ -95,7 +95,10 @@ struct thread {
 	int64_t wakeup_ticks; // thread deadline
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
-
+	struct lock *wait_on_lock;
+	struct list donations;
+	struct list_elem donation_elem;
+	int64_t original_priority;
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
@@ -141,10 +144,11 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
-
+void thread_preemption(void);
 void do_iret (struct intr_frame *tf);
 bool compare_priority(const struct list_elem *first, const struct list_elem *second, void *aux UNUSED);
 void thread_wakeup(int64_t g_ticks);
+bool compare_donate_priority(const struct list_elem *curr, const struct list_elem *cmp, void* aux UNUSED);
 bool compare_ticks(const struct list_elem *first, const struct list_elem *second, void *aux UNUSED);
 void thread_sleep(int64_t ticks);
 #endif /* threads/thread.h */

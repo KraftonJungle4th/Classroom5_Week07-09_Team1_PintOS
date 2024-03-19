@@ -179,11 +179,10 @@ thread_print_stats (void) {
    PRIORITY, but no actual priority scheduling is implemented.
    Priority scheduling is the goal of Problem 1-3. */
 tid_t
-thread_create (const char *name, int priority,
-		thread_func *function, void *aux) {
+thread_create (const char *name, int priority, thread_func *function, void *aux) {
 	struct thread *t;
+	
 	tid_t tid;
-
 	ASSERT (function != NULL);
 
 	/* Allocate thread. */
@@ -208,9 +207,8 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
+	thread_preemption();
 
-	
-	thread_yield();
 	return tid;
 }
 
@@ -380,22 +378,20 @@ bool compare_priority(const struct list_elem *first, const struct list_elem *sec
 	return first_thread->priority > second_thread->priority;
 }
 
-
+bool compare_donate_priority(const struct list_elem *curr, const struct list_elem *cmp, void* aux UNUSED)
+{
+	struct thread* curr_thread = list_entry(curr, struct thread, donation_elem);
+	struct thread* cmp_thread = list_entry(cmp, struct thread, donation_elem);
+	return curr_thread->priority > cmp_thread->priority;
+}
 
 
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
-void
-thread_set_priority (int new_priority) {
-	struct thread *curr = running_thread();
-	struct thread *first_thread_in_rdy = list_entry(list_begin(&ready_list),struct thread, elem);
-	thread_current ()->priority = new_priority;
-	list_sort(&ready_list, compare_priority, NULL);
-	if(curr->priority < first_thread_in_rdy->priority)
-	{
-		thread_yield();
-	}
-	
+void thread_set_priority (int new_priority) {
+	thread_current ()->original_priority = new_priority;
+	reset_priority();
+	thread_preemption();
 }
 
 /* Returns the current thread's priority. */
@@ -493,6 +489,9 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
+	t->original_priority = priority;
+	t->wait_on_lock = NULL;
+	list_init (&t->donations);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -673,5 +672,57 @@ allocate_tid (void) {
 	return tid;
 }
 
+void thread_preemption()
+{
+    struct thread *curr = running_thread();
+	struct thread *first_thread_in_rdy = list_entry(list_begin(&ready_list), struct thread, elem);
+	if(curr->priority < first_thread_in_rdy->priority && !list_empty(&ready_list))
+	{
+		thread_yield();
+	}
+}
 
+void donate_priority()
+{
+	struct thread *curr = thread_current();
+	for(int depth = 0; depth < 8; depth++)
+	{
+		if(!curr->wait_on_lock)
+		{
+			break;
+		}
+		struct thread *lock_holder = curr->wait_on_lock->holder;
+		lock_holder->priority = curr->priority;
+		curr = lock_holder;
+	}
+}
 
+void remove_lock(struct lock *lock)
+{
+	struct list_elem *element;
+	struct thread *curr = thread_current();
+
+	for(element = list_begin(&curr->donations); element != list_end(&curr->donations); element = list_next(element))
+	{
+		struct thread *thread = list_entry(element, struct thread, donation_elem);
+		if(thread->wait_on_lock == lock)
+		{
+			list_remove(&thread->donation_elem);
+		}
+	}
+}
+
+void reset_priority()
+{
+	struct thread *curr = thread_current();
+	curr->priority = curr->original_priority;
+	if(!list_empty(&curr->donations))
+	{
+		list_sort(&curr->donations, compare_donate_priority, NULL);
+		struct thread *front = list_entry(list_front(&curr->donations), struct thread, donation_elem);
+		if(front->priority > curr->priority)
+		{
+			curr->priority = front->priority;
+		}
+	}
+}
