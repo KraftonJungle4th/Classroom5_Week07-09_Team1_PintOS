@@ -29,6 +29,10 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+/*userprog - syscall*/
+#define FDT_PAGES 3
+#define FD_COUNT_LIMIT FDT_PAGES *(1<<9)
+
 /* A kernel thread or user process.
  *
  * Each thread structure is stored in its own 4 kB page.  The
@@ -95,13 +99,21 @@ struct thread {
 	int64_t wakeup_ticks; // thread deadline
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
+
 	struct lock *wait_on_lock;
 	struct list donations;
 	struct list_elem donation_elem;
 	int64_t original_priority;
+
+
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
+	int exit_status; 
+	struct file **fd_table;
+	int fd_idx;
+	int runn_file;  
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
