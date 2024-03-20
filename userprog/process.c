@@ -79,24 +79,25 @@ initd (void *f_name) {
 
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
-
+// tid_t
+// process_fork (const char *name, struct intr_frame *if_ UNUSED) {
+// 	/* Clone current thread to new thread.*/
+// 	struct thread *curr = thread_current();
+// 	memcpy (curr->parent_if, &if_, sizeof (struct intr_frame));
+// 	return thread_create (name,
+// 			PRI_DEFAULT, __do_fork, thread_current ());
+// }
 tid_t
 process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	/* Clone current thread to new thread.*/
 	struct thread *curr = thread_current();
-
 	memcpy(&curr->parent_if, if_, sizeof (struct intr_frame)); // &curr->tf를 parent_if에 copy
-
 	tid_t tid = thread_create (name, PRI_DEFAULT, __do_fork, thread_current ());
-
 	if (tid == TID_ERROR){
 		return TID_ERROR;
 	}
-
 	struct thread *t = find_child(tid);
-
 	sema_down(&t->child_load_sema);
-
 	if (t->exit_status == -1){
 		//sema_up(&t->exit_sema);
 		return TID_ERROR;
@@ -118,24 +119,20 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
 	if (is_kernel_vaddr(va))
 		return true;
-
 	/* 2. Resolve VA from the parent's page map level 4. */
 	parent_page = pml4_get_page (parent->pml4, va);
 	if (parent_page == NULL)
 		return false;
-
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
 	newpage = palloc_get_page(PAL_USER | PAL_ZERO);
 	if (newpage == NULL)
 		return false;
-
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
 	memcpy(newpage, parent_page, PGSIZE);
 	writable = is_writable(pte);
-
 	/* 5. Add new page to child's page table at address VA with WRITABLE
 	 *    permission. */
 	if (!pml4_set_page (current->pml4, va, newpage, writable)) {
@@ -185,6 +182,11 @@ __do_fork (void *aux) {
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
+	
+	// for(int i=2; i<parent->fd_idx; i++){
+	// 	struct file *new_file =file_duplicate(parent->fdt[i]);
+	// 	current->fdt[i] = new_file;
+	// 	}
 
 	if (parent->fd_idx == FDT_COUNT_LIMIT){
 		goto error;
@@ -195,7 +197,8 @@ __do_fork (void *aux) {
 		struct file *file = parent->fdt[i];
 		if(file==NULL)
 			continue;
-		file = file_duplicate(file);
+		if(file > 2)
+			file = file_duplicate(file);
 		current->fdt[i] = file;
 	}
 	current->fd_idx = parent->fd_idx;
@@ -248,8 +251,7 @@ process_exec (void *f_name) {
 		palloc_free_page(file_name);
 		return -1;
 	}
-
-	/* argument_passing(f_name); */
+	//argument_passing(f_name);
 	int arg_cnt=1;
 	char *save_ptr;
 
@@ -365,7 +367,7 @@ process_exit (void) {
 	// printf("PEXIT(): 1\n"); ///
 
 	// printf("fdt at %p\n", curr->fdt);
-	// printf("fdt[0] %p\n", curr->fdt[0]); 
+	// printf("fdt[0] %p\n", curr->fdt[0]);
 	int i;
  	for(i=2;i<FDT_COUNT_LIMIT;i++){
 		// printf("close iter: %d, curr->fdt[%d] = %p\n", i, i, curr->fdt[i]);

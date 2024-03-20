@@ -94,6 +94,8 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		f->R.rax = filesize(f->R.rdi);
 		break;
 	case SYS_READ:
+		// if(!check_addr(f->R.rsi))
+		// 	exit(-1);
 		f->R.rax = read(f->R.rdi,f->R.rsi,f->R.rdx);
 		break;
 	case SYS_WRITE:
@@ -134,6 +136,10 @@ pid_t fork (const char *thread_name, const struct intr_frame *f){
 
 /* process_create_initd 과 유사, thread_create은 fork에서 */
 int exec (const char *cmd_line){
+	// struct file *open_file = filesys_open(cmd_line);
+	// if(open_file == NULL){
+	// 	return -1;
+	// }
 	if(!check_addr(cmd_line))
 		exit(-1);
 	// int size = strlen(cmd_line) + 1;
@@ -150,8 +156,39 @@ int wait (pid_t child_tid){
 	return process_wait(child_tid);
 }
 
+// int create_fd(struct file *file){
+// 	struct thread *curr = thread_current();
+// 	if(curr->fd_idx <128){
+// 		int idx = curr->fd_idx;
+// 		curr->fdt[idx] = file;
+// 		curr->fd_idx ++;
+// 		return idx;
+// 	}
+// 	return -1;
+// }
 
-// for (int idx = curr->fd_idx; idx< FDT_COUNT_LIMIT; idx++){
+int create_fd(struct file *file){
+	// struct thread *curr = thread_current();
+	// struct file **fdt = curr->fdt;
+	// if(curr->fd_idx <128){
+	// 	int idx = curr->fd_idx;
+	// 	curr->fdt[idx] = file;
+	// 	curr->fd_idx ++;
+	// 	return idx;
+	// }
+	// return -1;
+	struct thread*curr = thread_current();
+	struct file**fdt = curr->fdt;
+
+	while(curr->fd_idx<FDT_COUNT_LIMIT&&fdt[curr->fd_idx])
+		curr->fd_idx++;
+		if(curr->fd_idx >= FDT_COUNT_LIMIT)
+			return -1;
+		fdt[curr->fd_idx] =file;
+
+		return curr->fd_idx;
+	
+	// for (int idx = curr->fd_idx; idx< FDT_COUNT_LIMIT; idx++){
 	// 	if (fdt[idx] == NULL){
 	// 		fdt[idx] = file;
 	// 		curr->fd_idx = idx;
@@ -159,26 +196,16 @@ int wait (pid_t child_tid){
 	// 	}
 	// }
 	// return -1;
-
-	
-int create_fd(struct file *file){
-	struct thread*curr = thread_current();
-	struct file**fdt = curr->fdt;
-
-	while(curr->fd_idx < FDT_COUNT_LIMIT && fdt[curr->fd_idx])
-		curr->fd_idx++;
-		if(curr->fd_idx >= FDT_COUNT_LIMIT)
-			return -1;
-		fdt[curr->fd_idx] = file;
-
-		return curr->fd_idx;
-	
 }
 
 struct file* find_file_by_fd(int fd){
+	// struct thread *curr = thread_current();
+	// struct file **fdt = curr->fdt;
+	// if(fd >128 || fd <3)
+	// 	exit(-1);
+	// return curr->fdt[fd];
 	struct thread*curr = thread_current();
 	struct file**fdt = curr->fdt;
-
 	if(fd < 2 || fd >= FDT_COUNT_LIMIT)
 		return NULL;
 	
@@ -186,15 +213,9 @@ struct file* find_file_by_fd(int fd){
 }
 
 void del_fd(int fd){
-	
-	struct thread*curr = thread_current();
-	struct file**fdt = curr->fdt;
-	if(fd < 2 || fd >= FDT_COUNT_LIMIT)
-	{
-		return NULL;
-	}
-	fdt[fd] = NULL;	 
-}
+	// struct thread *curr = thread_current();
+	// struct file **fdt = curr->fdt;
+
 	// if(fd == curr->fd_idx-1)
 	// {
 	// 	curr->fdt[fd] = NULL;
@@ -205,7 +226,26 @@ void del_fd(int fd){
 	// 	}
 	// 	curr->fd_idx --;
 	// }
-
+	struct thread*curr = thread_current();
+	struct file**fdt = curr->fdt;
+	if(fd < 2 || fd >= FDT_COUNT_LIMIT)
+	{
+		return NULL;
+	}
+	fdt[fd] = NULL;	 
+}
+bool create (const char *file, unsigned initial_size){
+	if(!check_addr(file)){
+			exit(-1);
+		}
+	lock_acquire(&filesys_lock);
+	// if(strlen(file) >= 511)
+	// 	return 0;
+	bool success = filesys_create(file,initial_size);
+	lock_release(&filesys_lock);
+	return success;
+	
+}
 // bool create (const char *file, unsigned initial_size){
 // 	// check_addr(file);
 // 	// printf("%d\n",strlen(file));
@@ -220,21 +260,9 @@ void del_fd(int fd){
 // 	// lock_release(&filesys_lock);
 // 	return success;
 // 	}
-
-bool create (const char *file, unsigned initial_size){
-	if(!check_addr(file))
-		exit(-1);
-	lock_acquire(&filesys_lock);
-	// if(strlen(file) >= 511)
-	// 	return 0;
-	bool success = filesys_create(file,initial_size);
-	lock_release(&filesys_lock);
-	return success;
-}
-
 bool remove (const char *file){
 	if(!check_addr(file))
-		exit(-1);
+			exit(-1);
 	//lock_acquire(&filesys_lock);
 	bool success = filesys_remove(file);
 	//lock_release(&filesys_lock);
@@ -244,8 +272,22 @@ bool remove (const char *file){
 /* returns fd*/
 int open (const char *file){
 	if(!check_addr(file))
-		exit(-1);
-		
+			exit(-1);
+	// // if(file == NULL){
+	// // 	exit(-1);
+	// // }
+	// lock_acquire(&filesys_lock);
+	// if(strcmp(file,"")== 0){
+	// 	return -1;
+	// }
+	// struct file *open_file = filesys_open(file);
+	// lock_release(&filesys_lock);
+	// if(open_file == NULL){
+	// 	return -1;
+	// }else {
+	// 	int fd = create_fd(open_file);
+	// 	return fd;
+	// }
 	struct file *f = filesys_open(file);
 
 	if (f == NULL)
@@ -257,7 +299,22 @@ int open (const char *file){
 
 	return fd;
 }
-
+// /* returns fd*/
+// int open (const char *file){
+// 	check_addr(file);
+// 	//lock_acquire(&filesys_lock);
+// 	struct file *f= filesys_open(file);
+	
+// 	if (f == NULL){
+// 	   	return -1;
+// 	}
+	
+// 	int fd = create_fd(file);
+// 	if (fd == -1)
+// 		file_close(f);
+// 	//lock_release(&filesys_lock);
+// 	return fd;
+// }
 int filesize (int fd){
 	struct file *file = find_file_by_fd(fd);
 	if(file == NULL)
@@ -296,7 +353,7 @@ int read (int fd, void *buffer, unsigned length){
 	return bytes_read;
 }
 
- /* STDIN:0 STDOUT:1*/
+// /* STDIN:0 STDOUT:1*/
 int write (int fd, const void *buffer, unsigned length){
 	if(check_addr(buffer) == 0)
 		exit(-1);

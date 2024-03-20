@@ -9,23 +9,18 @@ struct semaphore {
 	unsigned value;             /* Current value. */
 	struct list waiters;        /* List of waiting threads. */
 };
-/* Lock. */
-struct lock {
-	struct thread *holder;      /* Thread holding lock (for debugging). */
-	struct semaphore semaphore; /* Binary semaphore controlling access. */
-};
 
-struct lock_elem {
-   struct list_elem elem;
-   struct lock *lock;
-};
 void sema_init (struct semaphore *, unsigned value);
 void sema_down (struct semaphore *);
 bool sema_try_down (struct semaphore *);
 void sema_up (struct semaphore *);
 void sema_self_test (void);
-bool less_awake(const struct list_elem *a, const struct list_elem *b, void *aux);
-bool greater_priority(const struct list_elem *a, const struct list_elem *b, void *aux);
+
+/* Lock. */
+struct lock {
+	struct thread *holder;      /* Thread holding lock (for debugging). */
+	struct semaphore semaphore; /* Binary semaphore controlling access. */
+};
 
 void lock_init (struct lock *);
 void lock_acquire (struct lock *);
@@ -42,8 +37,12 @@ void cond_init (struct condition *);
 void cond_wait (struct condition *, struct lock *);
 void cond_signal (struct condition *, struct lock *);
 void cond_broadcast (struct condition *, struct lock *);
-void sema_up_awake (struct semaphore *sema);
-void sema_down_sleep (struct semaphore *sema);
+
+bool compare_sema_priority (const struct list_elem *a,
+ const struct list_elem *b, void *aux);
+
+void upadte_priority (void);
+
 /* Optimization barrier.
  *
  * The compiler will not reorder operations across an

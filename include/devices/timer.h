@@ -7,12 +7,12 @@
 /* Number of timer interrupts per second. */
 #define TIMER_FREQ 100
 
+int load_avg;
 void timer_init (void);
 void timer_calibrate (void);
 
 int64_t timer_ticks (void);
 int64_t timer_elapsed (int64_t);
-int get_load_avg(void);
 
 void timer_sleep (int64_t ticks);
 void timer_msleep (int64_t milliseconds);
