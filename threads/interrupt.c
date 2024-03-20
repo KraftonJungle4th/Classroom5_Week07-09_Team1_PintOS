@@ -154,9 +154,8 @@ intr_disable (void) {
 	/* Disable interrupts by clearing the interrupt flag.
 	   See [IA32-v2b] "CLI" and [IA32-v3a] 5.8.1 "Masking Maskable
 	   Hardware Interrupts". */
-	   // 인터럽트 비활성화
 	asm volatile ("cli" : : : "memory");
-	//하면서 원래 있던 레벨 리턴
+
 	return old_level;
 }
 

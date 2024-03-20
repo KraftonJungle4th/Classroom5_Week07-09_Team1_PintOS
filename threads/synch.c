@@ -37,15 +37,23 @@ struct semaphore_elem {
 	struct list_elem elem;              /* List element. */
 	struct semaphore semaphore;         /* This semaphore. */
 };
-struct list_elem *
-find_elem_by_lock(struct list *list,struct lock *lock){
-	struct list_elem * e;
-	for (e = list_begin (list); e != list_end (list); e = list_next (e)){
-      if (list_entry(e,struct lock_elem,elem)->lock == lock)
-			return e;
-   }
-   return NULL;
+
+bool compare_sema_priority (const struct list_elem *a,
+ const struct list_elem *b, void *aux){
+	struct semaphore_elem *sema1 = list_entry(a,struct semaphore_elem, elem);
+	struct semaphore_elem *sema2 = list_entry(b,struct semaphore_elem, elem);
+	// struct list * a1 = &(sema1->semaphore.waiters);
+	// struct list * a2 = &(sema2->semaphore.waiters);
+	return list_entry (list_begin(&(sema1->semaphore.waiters)), struct thread, elem)->priority
+	 > list_entry (list_begin(&(sema2->semaphore.waiters)), struct thread, elem)->priority;
 }
+
+bool compare_donation_priority (const struct list_elem *a,
+const struct list_elem *b, void *aux){
+	return list_entry (a, struct thread, d_elem)->priority
+	 > list_entry (b, struct thread, d_elem)->priority;
+}
+
 
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
@@ -72,73 +80,21 @@ sema_init (struct semaphore *sema, unsigned value) {
    interrupts disabled, but if it sleeps then the next scheduled
    thread will probably turn interrupts back on. This is
    sema_down function. */
-bool less_awake(const struct list_elem *a, const struct list_elem *b, void *aux) {
-    struct thread *thread_a = list_entry(a, struct thread, elem);
-    struct thread *thread_b = list_entry(b, struct thread, elem);
-
-    if(thread_a->awake_ticks == thread_b->awake_ticks)
-      return get_priority(thread_a) > get_priority(thread_b);
-    else
-      return thread_a->awake_ticks < thread_b->awake_ticks;
-}
-bool less_awake_mlfqs(const struct list_elem *a, const struct list_elem *b, void *aux) {
-    struct thread *thread_a = list_entry(a, struct thread, elem);
-    struct thread *thread_b = list_entry(b, struct thread, elem);
-   return thread_a->awake_ticks < thread_b->awake_ticks;
-}
-bool greater_priority(const struct list_elem *a, const struct list_elem *b, void *aux) {
-    struct thread *thread_a = list_entry(a, struct thread, elem);
-    struct thread *thread_b = list_entry(b, struct thread, elem);
-    return get_priority(thread_a) > get_priority(thread_b);
-}
-bool greater_priority_cond (const struct list_elem *a, const struct list_elem *b, void *aux) 
-{
-   struct semaphore_elem *sema_a = list_entry(a,struct semaphore_elem,elem);
-   struct semaphore_elem *sema_b = list_entry(b,struct semaphore_elem,elem);
-   struct list_elem *elem_a = list_begin(&sema_a->semaphore.waiters);
-   struct list_elem *elem_b = list_begin(&sema_b->semaphore.waiters);
-   struct thread *thread_a = list_entry(elem_a, struct thread, elem);
-   struct thread *thread_b = list_entry(elem_b, struct thread, elem);
-   return thread_a->priority > thread_b->priority;
-}
-bool greater_priority_lock (const struct list_elem *a, const struct list_elem *b, void *aux){
-   struct lock *lock_a = list_entry(a,struct lock_elem,elem)->lock;
-   struct lock *lock_b = list_entry(b,struct lock_elem,elem)->lock;
-   struct thread *thread_a = list_entry(list_begin(&lock_a->semaphore.waiters),struct thread,elem);
-   struct thread *thread_b = list_entry(list_begin(&lock_b->semaphore.waiters),struct thread,elem);
-   return thread_a->priority > thread_b->priority;
-}
-
-void
-sema_down (struct semaphore *sema) {
+void//blocking
+sema_down (struct semaphore *sema) {//P(Wait):자원요청시 실행하는 연산(자원 사용허가를 얻는 과정)
 	enum intr_level old_level;
 
 	ASSERT (sema != NULL);
 	ASSERT (!intr_context ());
 
-	old_level = intr_disable ();
+	old_level = intr_disable ();//인터럽트 비활성화
 	while (sema->value == 0) {
-		list_insert_ordered(&sema->waiters,&thread_current()->elem,greater_priority,NULL);
-		thread_block ();
+		//list_push_back (&sema->waiters, &thread_current ()->elem);//대기자 목록에 추가
+		list_insert_ordered(&sema->waiters,  &thread_current ()->elem, compare_priority, NULL);
+		thread_block ();//스레드를 블록(대기)상태로 전환
 	}
-   sema->value--;
-	intr_set_level (old_level);
-}
-
-void
-sema_down_sleep (struct semaphore *sema) {
-	enum intr_level old_level;
-
-	ASSERT (sema != NULL);
-	ASSERT (!intr_context ());
-
-	old_level = intr_disable ();
-	while (sema->value == 0) {
-		list_insert_ordered(&sema->waiters,&thread_current()->elem,less_awake_mlfqs,NULL);
-		thread_block ();
-	}
-   sema->value--;
-	intr_set_level (old_level);
+	sema->value--;//세마포어가 사용가능하면(value가 0보다 크면), 세마포어의 값을 하나 감소시켜 자원을 하나 사용한다
+	intr_set_level (old_level);//원래의 인터럽트 레벨로 복원
 }
 
 /* Down or "P" operation on a semaphore, but only if the
@@ -146,7 +102,7 @@ sema_down_sleep (struct semaphore *sema) {
    decremented, false otherwise.
 
    This function may be called from an interrupt handler. */
-bool
+bool//non-blocking
 sema_try_down (struct semaphore *sema) {
 	enum intr_level old_level;
 	bool success;
@@ -171,40 +127,19 @@ sema_try_down (struct semaphore *sema) {
 
    This function may be called from an interrupt handler. */
 void
-sema_up (struct semaphore *sema) {
+sema_up (struct semaphore *sema) {//V(signal):자원반환시 실행하는 연산(자원사용끝났음을 알리는 연산)
 	enum intr_level old_level;
+	//struct thread *t = list_entry (list_begin (&sema->waiters),struct thread, elem);
 	ASSERT (sema != NULL);
+
 	old_level = intr_disable ();
-   sema->value++;
-	if (!list_empty (&sema->waiters))
-   {
-      list_sort(&sema->waiters,greater_priority,NULL);
-      struct thread *t = list_entry(list_begin(&sema->waiters),struct thread, elem);
-      thread_unblock (list_entry (list_pop_front (&sema->waiters),
-					struct thread, elem)); 
-      if(get_priority(t) > thread_get_priority() && !intr_context()){
-         thread_yield();
-      }
-   }
-
-	intr_set_level (old_level);
-}
-void
-sema_up_awake (struct semaphore *sema) {
-	enum intr_level old_level;
-	ASSERT (sema != NULL);
-	old_level = intr_disable ();
-   sema->value++;
-	if (!list_empty (&sema->waiters))
-   {
-      struct thread *t = list_entry(list_pop_front (&sema->waiters),struct thread, elem);
-      thread_unblock (t); 
-
-      if(get_priority(t) > thread_get_priority() && !intr_context()){
-         thread_yield();
-      }
-   }
-
+	if (!list_empty (&sema->waiters)){ //세마포어의 대기자 목록이 비어있지않다면
+		list_sort (&sema->waiters, compare_priority, NULL);
+		thread_unblock (list_entry (list_pop_front (&sema->waiters),//list_pop_front() 함수는 대기 목록에서 첫 번째 항목을 제거
+					struct thread, elem));//unblcok해서 실행 준비상태로 전환
+	}
+	sema->value++; //세마포어가 관리하는 자원 중 하나가 다시 사용가능해짐
+	thread_preemption();
 	intr_set_level (old_level);
 }
 
@@ -226,7 +161,7 @@ sema_self_test (void) {
 	{
 		sema_up (&sema[0]);
 		sema_down (&sema[1]);
-	}
+	} 
 	printf ("done.\n");
 }
 
@@ -274,23 +209,41 @@ lock_init (struct lock *lock) {
    interrupt handler.  This function may be called with
    interrupts disabled, but interrupts will be turned back on if
    we need to sleep. */
-// todo donations 리스트에 thread 넣기
 void
 lock_acquire (struct lock *lock) {
-   struct lock_elem elem;
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
-   if(!thread_mlfqs){
-      if(lock->holder != NULL && find_elem_by_lock(&lock->holder->lock_list,lock) == NULL)
-      {
-         elem.lock = lock;
-         list_insert_ordered(&lock->holder->lock_list,&elem.elem,greater_priority_lock,NULL);
-      }
-   }
-   
-   sema_down (&lock->semaphore);
-	lock->holder = thread_current ();
+
+	if (!thread_mlfqs){
+		struct thread *curr = thread_current();
+		if(lock->holder){
+			curr->wait_on_lock = lock;
+			list_insert_ordered(&lock->holder->donations,&curr->d_elem,compare_donation_priority,NULL);
+			priority_donation();
+		}
+
+		sema_down (&lock->semaphore);
+		curr->wait_on_lock = NULL;
+		lock->holder = curr;
+	}
+	else{
+		sema_down (&lock->semaphore);
+		lock->holder = thread_current ();
+		}
+	}
+
+void
+priority_donation(void){
+	struct thread *curr = thread_current();
+	int depth;
+	for (depth=0; depth<8; depth++){
+		if (!curr->wait_on_lock)
+			break;
+		struct thread *holder = curr->wait_on_lock->holder;
+		holder->priority = curr->priority;
+		curr = holder; //holder가 가르키는 thread로 curr 설정
+	}
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -320,18 +273,44 @@ lock_try_acquire (struct lock *lock) {
    handler. */
 void
 lock_release (struct lock *lock) {
-   struct list_elem *e;
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
-   if(!thread_mlfqs){
-      if((e = find_elem_by_lock(&thread_current()->lock_list,lock)) != NULL)
-      {
-         list_remove(e);
-         list_sort(&thread_current()->lock_list,greater_priority_lock,NULL);
-      }  
-   }
-   lock->holder = NULL;
-	sema_up (&lock->semaphore);
+
+	if (!thread_mlfqs){
+		remove_lock(lock);
+		update_priority ();
+		lock->holder = NULL;
+		sema_up (&lock->semaphore);
+	}
+	else{
+		lock->holder = NULL;
+		sema_up (&lock->semaphore);
+	}
+}
+
+void
+remove_lock (struct lock *lock){
+	struct thread *curr = thread_current ();
+	struct list_elem *e;
+	for (e = list_begin (&curr->donations); e != list_end (&curr->donations); e = list_next (e)){
+		struct thread *t = list_entry (e, struct thread, d_elem);
+		if (t->wait_on_lock == lock)
+			list_remove (&t->d_elem);
+	}
+}
+
+void
+update_priority (void){
+	struct thread *curr =thread_current ();
+	curr->priority = curr->original_priority;
+	if (!list_empty (&curr->donations)){
+		list_sort (&curr->donations, compare_donation_priority, NULL);
+		struct list_elem *e = list_begin(&curr->donations);
+		struct thread *t = list_entry (e,struct thread, d_elem);
+		/*기부받은 우선순위 중 가장 높은 우선순위로 자신의 우선순위를 업데이트*/
+		if (t->priority > curr->priority)
+			curr->priority = t->priority;
+	}
 }
 
 /* Returns true if the current thread holds LOCK, false
@@ -344,6 +323,7 @@ lock_held_by_current_thread (const struct lock *lock) {
 	return lock->holder == thread_current ();
 }
 
+
 
 /* Initializes condition variable COND.  A condition variable
    allows one piece of code to signal a condition and cooperating
@@ -385,8 +365,8 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	sema_init (&waiter.semaphore, 0);
-   list_insert_ordered(&cond->waiters,&waiter.elem,
-		greater_priority_cond,NULL); 
+	//list_push_back (&cond->waiters, &waiter.elem);
+	list_insert_ordered(&cond->waiters, &waiter.elem, compare_sema_priority, NULL);
 	lock_release (lock);
 	sema_down (&waiter.semaphore);
 	lock_acquire (lock);
@@ -403,19 +383,14 @@ void
 cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (cond != NULL);
 	ASSERT (lock != NULL);
+	ASSERT (!intr_context ());
 	ASSERT (lock_held_by_current_thread (lock));
-   
-	if (!list_empty (&cond->waiters))
-      list_sort(&cond->waiters,greater_priority_cond,NULL);
-      struct thread *t = list_entry(list_begin(&list_entry(list_begin(&cond->waiters),struct semaphore_elem,elem)
-                     ->semaphore.waiters),struct thread,elem);
+
+	if (!list_empty (&cond->waiters)){
+		list_sort(&cond->waiters,compare_sema_priority, NULL);
 		sema_up (&list_entry (list_pop_front (&cond->waiters),
 					struct semaphore_elem, elem)->semaphore);
-   
-      if(t->priority > thread_get_priority()){
-         thread_yield();
-      }
-   
+	}
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by

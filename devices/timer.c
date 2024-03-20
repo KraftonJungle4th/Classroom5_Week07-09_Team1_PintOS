@@ -7,6 +7,7 @@
 #include "threads/io.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "threads/fixed-point.h"
 
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -54,7 +55,7 @@ timer_calibrate (void) {
 	printf ("Calibrating timer...  ");
 
 	/* Approximate loops_per_tick as the largest power-of-two
-	   still less than one timer tick. */
+	   still less than one t imer tick. */
 	loops_per_tick = 1u << 10;
 	while (!too_many_loops (loops_per_tick << 1)) {
 		loops_per_tick <<= 1;
@@ -72,11 +73,9 @@ timer_calibrate (void) {
 
 /* Returns the number of timer ticks since the OS booted. */
 int64_t
-timer_ticks (void) {
-	//잠깐 인터럽트 끔
+timer_ticks (void) { //Global ticks
 	enum intr_level old_level = intr_disable ();
 	int64_t t = ticks;
-	//원래대로 돌림
 	intr_set_level (old_level);
 	barrier ();
 	return t;
@@ -90,14 +89,17 @@ timer_elapsed (int64_t then) {
 }
 
 /* Suspends execution for approximately TICKS timer ticks. */
-// ticks 시간동안 프로그램을 멈추겠다
 void
 timer_sleep (int64_t ticks) {
-	int64_t start = timer_ticks ();
+	/* fix start*/
+	// int64_t start = timer_ticks ();//return the value of the current tick
 
 	ASSERT (intr_get_level () == INTR_ON);
+	
+		thread_sleep(timer_ticks () + ticks);
 
-	thread_sleep(start + ticks);
+	// while (timer_elapsed (start) < ticks)//timer_elapse:return the value of the current tick
+	// 	thread_yield (); // yield the cpu and insert thread to ready_list
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -124,31 +126,34 @@ timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
 
-
-/* Timer interrupt handler. */
+ /* Timer interrupt handler. */
+ 
+/*At every tick, check whether some thread must wake up from
+ sleep queue and call wake up function*/
 static void
-timer_interrupt (struct intr_frame *args UNUSED) {
-	ticks++;
-	thread_tick ();
-	/*
-		1. sleeplist 와 전역 tick 확인.
-		2. 깨울 thread 있는지 확인.
-		3. 깨울 쓰레드를 준비 리스트로 이동.
-		4. 전역 tick 업데이트 
-	*/
-	thread_awake(ticks);
-	if(thread_mlfqs){
-		update_recent_cpu();
-		if(ticks % TIMER_FREQ == 0 ){
-			update_load_avg();
-			decay_recent_cpu();
-		}
-		if(ticks % 4 == 0) {
-			update_priority();
-		}
-	}
-}
+timer_interrupt(struct intr_frame *args UNUSED) {
+    ticks++;
+    thread_tick(); // 현재 실행 중인 프로세스의 CPU 사용 시간을 업데이트
 
+	/* code to add:
+		check sleep list and the global tick.
+		find any threads to wake up,
+		move them to the ready list if necessary.
+		update the global tick.
+	*/
+	if (thread_mlfqs){
+		increment_recent_cpu();
+		if (timer_ticks() % TIMER_FREQ == 0)//1초마다
+			{
+				calculate_load_avg();
+				recalculate_recent_cpu();
+			}
+		if (timer_ticks() % 4 == 0) //4틱마다
+		 	recalculate_priority();
+	}
+	thread_wakeup(ticks); 
+}
+	
 /* Returns true if LOOPS iterations waits for more than one timer
    tick, otherwise false. */
 static bool

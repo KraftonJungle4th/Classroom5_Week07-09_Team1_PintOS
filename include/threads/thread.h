@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -27,6 +28,7 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
 /* A kernel thread or user process.
  *
  * Each thread structure is stored in its own 4 kB page.  The
@@ -90,20 +92,51 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
+
 	/* Shared between thread.c and synch.c. */
-	struct list_elem elem;              /* List element. */
+	struct list_elem elem;              /* List element. */\
+
+	/*time to wake up*/
+	int64_t wakeup_ticks; 
+
+	int original_priority;
+
+	struct lock *wait_on_lock;
+
+	struct list donations;
+
+	struct list_elem d_elem;
+
 	struct list_elem all_elem;
-	int64_t awake_ticks;
-	struct list lock_list;
-	struct file *files[64];
-	int fd_idx;
+
+	int recent_cpu;
+
 	int nice;
-	int32_t recent_cpu;
+
+	int exit_status;
+
+	//struct file *fdt[64];
 	
+	struct file **fdt;
+	
+	int fd_idx;
+	
+	struct file* exec_file;
+
+	struct list child_list;
+
+	struct list_elem child_elem;
+
+	struct semaphore wait_sema;
+
+	struct semaphore exit_sema;
+
+	struct semaphore child_load_sema;
+
+	struct intr_frame parent_if;
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
-	int exit_status;
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
@@ -120,6 +153,8 @@ struct thread {
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
 
+int ready_threads (void);
+
 void thread_init (void);
 void thread_start (void);
 
@@ -128,7 +163,7 @@ void thread_print_stats (void);
 
 typedef void thread_func (void *aux);
 tid_t thread_create (const char *name, int priority, thread_func *, void *);
-int thread_ready_list(void);
+
 void thread_block (void);
 void thread_unblock (struct thread *);
 
@@ -138,22 +173,34 @@ const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
-void thread_sleep (int64_t end_ticks);
-void thread_awake (int64_t ticks);
 
 int thread_get_priority (void);
-int get_priority (struct thread *t);
 void thread_set_priority (int);
 
 int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
-void update_load_avg(void);
+
 void do_iret (struct intr_frame *tf);
-void update_recent_cpu(void);
-void decay_recent_cpu(void);
-void set_decay(struct thread *t);
-void set_priority(struct thread *t);
-void update_priority(void);
+
+void thread_sleep(int64_t ticks);
+
+bool compare_priority (const struct list_elem *a,
+ const struct list_elem *b, void *aux);
+
+int ready_threads (void);
+void increment_recent_cpu(void);
+void calculate_load_avg(void);
+void calculate_recent_cpu(struct thread *curr);
+void calculate_priority(struct thread *curr);
+void recalculate_priority(void);
+void recalculate_recent_cpu(void);
+
+
+#define FDT_PAGES 3
+#define FDT_COUNT_LIMIT FDT_PAGES *(1 << 9)
+
 #endif /* threads/thread.h */
+
+

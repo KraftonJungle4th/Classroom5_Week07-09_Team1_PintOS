@@ -100,6 +100,7 @@ struct list {
    name of the outer structure STRUCT and the member name MEMBER
    of the list element.  See the big comment at the top of the
    file for an example. */
+   /*연결 리스트의 요소로부터 해당 요소를 포함하고 있는 구조체를 얻기 위해 사용*/
 #define list_entry(LIST_ELEM, STRUCT, MEMBER)           \
 	((STRUCT *) ((uint8_t *) &(LIST_ELEM)->next     \
 		- offsetof (STRUCT, MEMBER.next)))
@@ -117,7 +118,7 @@ struct list_elem *list_rend (struct list *);
 
 struct list_elem *list_head (struct list *);
 struct list_elem *list_tail (struct list *);
-int is_in_list(struct list *list,struct list_elem *elem);
+
 /* List insertion. */
 void list_insert (struct list_elem *, struct list_elem *);
 void list_splice (struct list_elem *before,
