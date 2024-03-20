@@ -39,8 +39,64 @@ syscall_init (void) {
 
 /* The main system call interface */
 void
-syscall_handler (struct intr_frame *f UNUSED) {
-	// TODO: Your implementation goes here.
-	printf ("system call!\n");
-	thread_exit ();
+syscall_handler (struct intr_frame *f UNUSED) 
+{
+	int syscall_number;
+	switch(syscall_number)
+	{
+		case SYS_HALT:
+			{
+				halt();
+				break;
+			}
+		case SYS_EXIT:
+			{
+				exit(f->R.rdi);
+				break;
+			}
+		case SYS_FORK:
+		
+		case SYS_EXEC:
+		
+		case SYS_WAIT:
+		
+		case SYS_CREATE:
+		
+		case SYS_REMOVE:
+		
+		case SYS_OPEN:
+		
+		case SYS_FILESIZE:
+		
+		case SYS_READ:
+		
+		case SYS_WRITE:
+		
+		case SYS_SEEK:
+		
+		case SYS_TELL:
+		
+		case SYS_CLOSE:
+
+		default:
+			printf("!!!!!!!!!!!!!ERROR!!!!!!!!!!!!!\n system call %d error", syscall_number);
+			thread_exit();
+			break;
+	}
 }
+
+	void halt()
+	{
+		power_off();
+	}
+
+	void exit(int status)
+	{
+		printf("%s: exit(%d)\n", thread_current()->name, status);
+		thread_exit();
+	}
+
+	int exec(const char*cmd_line)
+	{
+		
+	}
