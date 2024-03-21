@@ -194,6 +194,7 @@ tid_t thread_create(const char *name, int priority, thread_func *function, void 
 
 #ifdef USERPROG
 	/* --- Project 2 - System call --- */
+	list_push_back(&thread_current()->child_list, &t->c_elem);
 	t->fd_table = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
 	if (t->fd_table == NULL)
 	{
@@ -505,6 +506,13 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->original_priority = priority;
 	t->wait_on_lock = NULL;
 	list_init(&t->donations);
+
+#ifdef USERPROG
+	list_init(&t->child_list);
+	sema_init(&t->wait_sema, 0);
+	sema_init(&t->load_sema, 0);
+	sema_init(&t->exit_sema, 0);
+#endif
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
